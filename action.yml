@@ -1,0 +1,35 @@
+name: Slack Dual Notify
+description: Send a Slack channel notification and/or direct messages to reviewers, mapping GitHub usernames to Slack user IDs
+author: kreuz123
+branding:
+  icon: message-square
+  color: blue
+
+inputs:
+  message-template:
+    description: Message body sent to Slack. Newlines, whitespace, and special characters are preserved.
+    required: true
+  target-users:
+    description: Comma-separated list of usernames to notify. Entries are trimmed and empty entries are removed.
+    required: true
+  send-channel:
+    description: Whether to send a notification to the Slack channel.
+    required: false
+    default: "true"
+  send-dm:
+    description: Whether to send direct messages to users who are mapped to a Slack user ID.
+    required: false
+    default: "true"
+  slack-bot-token:
+    description: Slack bot token used to authenticate API requests.
+    required: true
+  slack-channel-id:
+    description: Slack channel ID to post the channel notification to. Required when send-channel is true.
+    required: false
+  slack-reviewer-map:
+    description: 'JSON object mapping GitHub usernames to Slack user IDs, e.g. { "alice": "U0123456789" }. Lookup is case-insensitive.'
+    required: true
+
+runs:
+  using: node24
+  main: dist/index.js
