@@ -24,6 +24,7 @@ describe("run", () => {
   let setOutputSpy;
 
   beforeEach(() => {
+    postMessage.mockClear();
     setFailedSpy = jest.spyOn(core, "setFailed").mockImplementation(() => {});
     setOutputSpy = jest.spyOn(core, "setOutput").mockImplementation(() => {});
     jest.spyOn(core, "info").mockImplementation(() => {});

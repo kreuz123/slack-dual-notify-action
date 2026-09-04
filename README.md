@@ -69,6 +69,18 @@ jobs:
           slack-reviewer-map: ${{ secrets.SLACK_REVIEWER_MAP }}
 ```
 
+When passing GitHub event values, prefer environment variables over inserting
+event data directly into JavaScript expressions:
+
+```yaml
+env:
+  ACTION: ${{ github.event.action }}
+  NEW_REVIEWER: ${{ github.event.requested_reviewer.login }}
+```
+
+Read these values in JavaScript with `process.env.ACTION` and
+`process.env.NEW_REVIEWER`.
+
 `SLACK_REVIEWER_MAP` is a repository or organization secret containing a JSON object, for example:
 
 ```json
