@@ -2,6 +2,8 @@
 
 A GitHub Marketplace JavaScript Action that sends a Slack **channel notification** and/or **direct messages (DMs)** to reviewers, mapping GitHub usernames to Slack user IDs via a reviewer map.
 
+It supports sending notifications to a channel, mapped reviewers by DM, or both.
+
 This action is a drop-in replacement for the previous `workflow_call` reusable workflow ("Reusable Slack Notification") that relied on `actions/github-script` and `slackapi/slack-github-action`. It keeps the exact same functional behavior while being publishable as a standalone Marketplace action.
 
 ## Inputs
