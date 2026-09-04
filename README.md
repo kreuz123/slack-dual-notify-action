@@ -9,7 +9,7 @@ This action is a drop-in replacement for the previous `workflow_call` reusable w
 | Input                | Required                              | Default | Description |
 |-----------------------|----------------------------------------|---------|-------------|
 | `message-template`    | Yes                                    | —       | Message body sent to Slack. Newlines, whitespace, and special characters (quotes, backticks, `${...}`) are preserved exactly as provided. |
-| `target-users`        | Yes                                    | —       | Comma-separated list of usernames to notify, e.g. `alice, bob`. Entries are trimmed and empty entries removed. |
+| `target-users`        | No                                     | `""`    | Comma-separated list of usernames to notify, e.g. `alice, bob`. Entries are trimmed and empty entries removed. |
 | `send-channel`        | No                                     | `true`  | Whether to send a notification to the Slack channel. |
 | `send-dm`             | No                                     | `true`  | Whether to send direct messages to users who are mapped to a Slack user ID. |
 | `slack-bot-token`     | Yes                                    | —       | Slack bot token (e.g. from `secrets.SLACK_BOT_TOKEN`) used to authenticate API requests. |
@@ -22,13 +22,26 @@ This action is a drop-in replacement for the previous `workflow_call` reusable w
 - Each user is looked up in `slack-reviewer-map` case-insensitively.
   - Mapped users are rendered as `<@SLACK_USER_ID>` in the channel message.
   - Unmapped users are rendered as `@username` in the channel message.
-- When `send-channel` is `true`, the action calls Slack's [`chat.postMessage`](https://api.slack.com/methods/chat.postMessage) with `channel: slack-channel-id` and `text: "<message-template> <mentions>"`.
+- When `send-channel` is `true`, the action calls Slack's [`chat.postMessage`](https://api.slack.com/methods/chat.postMessage) with `channel: slack-channel-id` and the message template, followed by mentions when any exist.
+  - The `channel-ts` output contains the timestamp returned by Slack, when sent.
 - When `send-dm` is `true` **and** at least one user was mapped, the action calls `chat.postMessage` once per mapped Slack user ID, with `channel: <slack user id>` and `text: <message-template>` (without the mention list).
   - No DM is sent to unmapped users.
   - No DM is sent at all if there are no mapped users, even if `send-dm` is `true`.
 - If `send-channel` is `false`, no channel message is sent.
 - If `send-dm` is `false`, no DMs are sent.
 - Any Slack API failure (non-2xx HTTP status, or `ok: false` in the JSON response) fails the action. Error messages never include the bot token — only the target channel/user ID and Slack's error code are surfaced.
+- The `dm-ts` output is a JSON object mapping successfully messaged Slack user IDs to timestamps, and `dm-failures` is the number of failed DMs.
+- All mapped users are attempted even if one DM fails; any failure marks the action as failed after all attempts complete.
+
+Slack requests use `@slack/web-api` with a 10-second timeout and up to three SDK retries, including for rate limits. Persistent failures still fail the action.
+
+### Outputs
+
+| Output | Description |
+|--------|-------------|
+| `channel-ts` | Timestamp of the channel message, when sent. |
+| `dm-ts` | JSON object mapping Slack user IDs to message timestamps. |
+| `dm-failures` | Number of direct messages that failed. |
 
 ## Usage
 
@@ -135,5 +148,5 @@ All 34 tests pass across 5 suites (`reviewer-map`, `mentions`, `boolean-input`, 
 ## Known limitations
 
 - DM delivery attempts continue for all mapped users even if one fails, but the action is still marked as failed overall if any DM could not be delivered.
-- Slack rate limits are not automatically retried; a `429` response will fail the action.
+- Slack rate limits are retried by the SDK up to three times; persistent failures will fail the action.
 - The reviewer map is expected to be flat key/value pairs of `username -> Slack user ID` strings; nested structures are rejected.

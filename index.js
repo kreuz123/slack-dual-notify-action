@@ -7,7 +7,7 @@ const { postMessage } = require("./src/slack");
 async function run() {
   try {
     const messageTemplate = core.getInput("message-template", { required: true, trimWhitespace: false });
-    const targetUsersInput = core.getInput("target-users", { required: true });
+    const targetUsersInput = core.getInput("target-users");
     const token = core.getInput("slack-bot-token", { required: true });
     const reviewerMapInput = core.getInput("slack-reviewer-map", { required: true });
 
@@ -24,26 +24,31 @@ async function run() {
     const { mentions, slackIds } = buildMentions(targetUsers, reviewerMap);
 
     if (sendChannel) {
-      const channelText = `${messageTemplate} ${mentions}`;
-      await postMessage({ token, channel: channelId.trim(), text: channelText });
+      const channelText = mentions ? `${messageTemplate} ${mentions}` : messageTemplate;
+      const result = await postMessage({ token, channel: channelId.trim(), text: channelText });
+      core.setOutput("channel-ts", result.ts || "");
       core.info(`Slack channel notification sent to ${channelId.trim()}`);
     }
 
+    const dmTimestamps = {};
+    const errors = [];
     if (sendDm && slackIds.length > 0) {
-      const errors = [];
       for (const userId of slackIds) {
         try {
-          await postMessage({ token, channel: userId, text: messageTemplate });
+          const result = await postMessage({ token, channel: userId, text: messageTemplate });
+          dmTimestamps[userId] = result.ts || "";
           core.info(`Slack DM sent to ${userId}`);
         } catch (error) {
           core.error(error.message);
           errors.push(error.message);
         }
       }
-      if (errors.length > 0) {
-        throw new Error(`Failed to send ${errors.length} Slack DM(s): ${errors.join("; ")}`);
-      }
       core.info(`Processed ${slackIds.length} Slack DM(s)`);
+    }
+    core.setOutput("dm-ts", JSON.stringify(dmTimestamps));
+    core.setOutput("dm-failures", String(errors.length));
+    if (errors.length > 0) {
+      throw new Error(`Failed to send ${errors.length} Slack DM(s): ${errors.join("; ")}`);
     }
   } catch (error) {
     core.setFailed(error.message);
