@@ -1,4 +1,4 @@
-const SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage";
+const { WebClient } = require("@slack/web-api");
 
 /**
  * Sends a message via Slack's chat.postMessage API.
@@ -12,31 +12,16 @@ const SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage";
  *   channel/user ID and Slack error code.
  */
 async function postMessage({ token, channel, text }) {
-  const authorizationHeader = ["Bearer", token].join(" ");
-  let response;
+  const client = new WebClient(token, {
+    timeout: 10000,
+    retryConfig: { retries: 3 },
+  });
   try {
-    response = await fetch(SLACK_POST_MESSAGE_URL, {
-      method: "POST",
-      headers: {
-        Authorization: authorizationHeader,
-        "Content-Type": "application/json; charset=utf-8",
-      },
-      body: JSON.stringify({ channel, text }),
-    });
+    return await client.chat.postMessage({ channel, text });
   } catch (error) {
-    throw new Error(`Slack request to ${channel} failed: ${error.message}`);
+    const code = typeof error?.data?.error === "string" ? error.data.error : "request_failed";
+    throw new Error(`Slack request to ${channel} failed: ${code}`);
   }
-
-  if (!response.ok) {
-    throw new Error(`Slack request to ${channel} failed with HTTP status ${response.status}`);
-  }
-
-  const result = await response.json();
-  if (!result.ok) {
-    throw new Error(`Slack request to ${channel} failed: ${result.error || "unknown_error"}`);
-  }
-
-  return result;
 }
 
 module.exports = { postMessage };

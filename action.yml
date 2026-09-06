@@ -11,7 +11,8 @@ inputs:
     required: true
   target-users:
     description: Comma-separated list of usernames to notify. Entries are trimmed and empty entries are removed.
-    required: true
+    required: false
+    default: ""
   send-channel:
     description: Whether to send a notification to the Slack channel.
     required: false
@@ -29,6 +30,14 @@ inputs:
   slack-reviewer-map:
     description: 'JSON object mapping GitHub usernames to Slack user IDs, e.g. { "alice": "U0123456789" }. Lookup is case-insensitive.'
     required: true
+
+outputs:
+  channel-ts:
+    description: Timestamp of the channel message, when sent.
+  dm-ts:
+    description: JSON object mapping Slack user IDs to message timestamps.
+  dm-failures:
+    description: Number of direct messages that failed.
 
 runs:
   using: node24
