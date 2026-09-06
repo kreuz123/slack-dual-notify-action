@@ -26,7 +26,10 @@ async function run() {
     if (sendChannel) {
       const channelText = mentions ? `${messageTemplate} ${mentions}` : messageTemplate;
       const result = await postMessage({ token, channel: channelId.trim(), text: channelText });
-      core.setOutput("channel-ts", result.ts || "");
+      if (!result.ts) {
+        throw new Error(`Slack response for channel ${channelId.trim()} is missing a message timestamp.`);
+      }
+      core.setOutput("channel-ts", result.ts);
       core.info(`Slack channel notification sent to ${channelId.trim()}`);
     }
 
@@ -36,7 +39,10 @@ async function run() {
       for (const userId of slackIds) {
         try {
           const result = await postMessage({ token, channel: userId, text: messageTemplate });
-          dmTimestamps[userId] = result.ts || "";
+          if (!result.ts) {
+            throw new Error(`Slack response for DM ${userId} is missing a message timestamp.`);
+          }
+          dmTimestamps[userId] = result.ts;
           core.info(`Slack DM sent to ${userId}`);
         } catch (error) {
           core.error(error.message);

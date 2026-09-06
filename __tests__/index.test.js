@@ -82,6 +82,29 @@ describe("run", () => {
     expect(postMessage).toHaveBeenCalledTimes(1);
   });
 
+  test("fails when channel response is missing a message timestamp", async () => {
+    mockInputs({ "send-dm": "false" });
+    postMessage.mockImplementation(async () => ({ ts: "" }));
+    await run();
+    expect(setFailedSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Slack response for channel C0123456789 is missing a message timestamp."),
+    );
+    expect(setOutputSpy).not.toHaveBeenCalledWith("channel-ts", expect.anything());
+  });
+
+  test("treats a DM response missing a timestamp as a failure while other DMs continue", async () => {
+    mockInputs({ "target-users": "alice, bob", "slack-reviewer-map": '{"alice":"U111","bob":"U222"}' });
+    postMessage.mockImplementation(async ({ channel }) => {
+      if (channel === "U111") return { ts: "" };
+      return { ts: `ts-${channel}` };
+    });
+    await run();
+    expect(postMessage).toHaveBeenCalledTimes(3);
+    expect(setOutputSpy).toHaveBeenCalledWith("dm-ts", '{"U222":"ts-U222"}');
+    expect(setOutputSpy).toHaveBeenCalledWith("dm-failures", "1");
+    expect(setFailedSpy).toHaveBeenCalledWith(expect.stringContaining("missing a message timestamp"));
+  });
+
   test("fails on invalid reviewer map JSON", async () => {
     mockInputs({ "slack-reviewer-map": "{not-json" });
     await run();
