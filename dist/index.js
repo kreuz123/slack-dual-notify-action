@@ -37182,7 +37182,7 @@ async function postMessage({ token, channel, text }) {
   try {
     return await client.chat.postMessage({ channel, text });
   } catch (error) {
-    const code = error.data?.error || error.code || error.message || "unknown_error";
+    const code = typeof error?.data?.error === "string" ? error.data.error : "request_failed";
     throw new Error(`Slack request to ${channel} failed: ${code}`);
   }
 }

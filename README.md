@@ -30,7 +30,7 @@ This action is a drop-in replacement for the previous `workflow_call` reusable w
   - No DM is sent at all if there are no mapped users, even if `send-dm` is `true`.
 - If `send-channel` is `false`, no channel message is sent.
 - If `send-dm` is `false`, no DMs are sent.
-- Any Slack API failure (non-2xx HTTP status, or `ok: false` in the JSON response) fails the action. Error messages never include the bot token — only the target channel/user ID and Slack's error code are surfaced.
+- Any Slack API failure (non-2xx HTTP status, or `ok: false` in the JSON response) fails the action. Error messages never include the bot token — only the target channel/user ID and a Slack platform error code when available; otherwise, `request_failed` is used.
 - The `dm-ts` output is a JSON object mapping successfully messaged Slack user IDs to timestamps, and `dm-failures` is the number of failed DMs.
 - All mapped users are attempted even if one DM fails; any failure marks the action as failed after all attempts complete.
 
