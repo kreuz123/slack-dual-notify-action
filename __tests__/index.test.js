@@ -77,9 +77,38 @@ describe("run", () => {
   });
 
   test("supports DM-only mode", async () => {
-    mockInputs({ "send-channel": "false" });
+    mockInputs({ "send-channel": "false", "target-users": "alice", "slack-reviewer-map": '{"alice":"U0123456789"}' });
     await run();
     expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).toHaveBeenCalledWith({
+      token: FAKE_TOKEN, channel: "U0123456789", text: "Hello team!",
+    });
+    expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ channel: "C0123456789" }));
+  });
+
+  test("fails when channel sending is enabled without a channel ID", async () => {
+    mockInputs({ "slack-channel-id": "  " });
+    await run();
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(setFailedSpy).toHaveBeenCalledWith(
+      'Input "slack-channel-id" is required when "send-channel" is true.',
+    );
+  });
+
+  test("sends no messages when channel and DM sending are disabled", async () => {
+    mockInputs({ "send-channel": "false", "send-dm": "false" });
+    await run();
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(setFailedSpy).not.toHaveBeenCalled();
+  });
+
+  test("preserves special characters in a message without mentions", async () => {
+    const message = 'line one\n"quoted" `code` ${value}\nline two';
+    mockInputs({ "message-template": message, "target-users": "" });
+    await run();
+    expect(postMessage).toHaveBeenCalledWith({
+      token: FAKE_TOKEN, channel: "C0123456789", text: message,
+    });
   });
 
   test("fails on invalid reviewer map JSON", async () => {

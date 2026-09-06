@@ -24,4 +24,17 @@ describe("postMessage", () => {
     expect(error.message).toBe("Slack request to C123 failed: invalid_auth");
     expect(error.message).not.toContain(token);
   });
+
+  test("reports generic request failures without exposing the token", async () => {
+    const token = "xoxb-secret-token";
+    WebClient.mockImplementation(() => ({
+      chat: {
+        postMessage: jest.fn().mockRejectedValue(new Error(`request failed with ${token}`)),
+      },
+    }));
+
+    const error = await postMessage({ token, channel: "C123", text: "hi" }).catch((e) => e);
+    expect(error.message).toBe("Slack request to C123 failed: request_failed");
+    expect(error.message).not.toContain(token);
+  });
 });

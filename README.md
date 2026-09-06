@@ -14,14 +14,15 @@ This action is a drop-in replacement for the previous `workflow_call` reusable w
 | `send-dm`             | No                                     | `true`  | Whether to send direct messages to users who are mapped to a Slack user ID. |
 | `slack-bot-token`     | Yes                                    | —       | Slack bot token (e.g. from `secrets.SLACK_BOT_TOKEN`) used to authenticate API requests. |
 | `slack-channel-id`    | Required when `send-channel` is `true` | —       | Slack channel ID to post the channel notification to. |
-| `slack-reviewer-map`  | Yes                                    | —       | JSON object mapping GitHub usernames to Slack user IDs, e.g. `{ "alice": "U0123456789" }`. Lookup is **case-insensitive**. |
+| `slack-reviewer-map`  | Yes                                    | —       | JSON object mapping GitHub usernames to Slack user IDs, e.g. `{ "alice": "U0123456789" }`. Use `{}` for channel-only notifications. Lookup is **case-insensitive**. |
 
 ## Behavior
 
 - `target-users` is split on commas, trimmed, and empty entries are removed.
 - Each user is looked up in `slack-reviewer-map` case-insensitively.
   - Mapped users are rendered as `<@SLACK_USER_ID>` in the channel message.
-  - Unmapped users are rendered as `@username` in the channel message.
+  - Unmapped users are rendered as plain-text `@username` in the channel message; no DM is sent for them.
+- `slack-reviewer-map` remains required, but it may be `{}` when no GitHub-to-Slack mappings are needed, such as for channel-only notifications.
 - When `send-channel` is `true`, the action calls Slack's [`chat.postMessage`](https://api.slack.com/methods/chat.postMessage) with `channel: slack-channel-id` and the message template, followed by mentions when any exist.
   - The `channel-ts` output contains the timestamp returned by Slack, when sent.
 - When `send-dm` is `true` **and** at least one user was mapped, the action calls `chat.postMessage` once per mapped Slack user ID, with `channel: <slack user id>` and `text: <message-template>` (without the mention list).
