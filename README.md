@@ -1,48 +1,25 @@
 # Slack Dual Notify Action
 
-A GitHub Marketplace JavaScript Action that sends a Slack **channel notification** and/or **direct messages (DMs)** to reviewers, mapping GitHub usernames to Slack user IDs via a reviewer map.
+A GitHub Action that sends a Slack channel notification, direct messages (DMs) to reviewers, or both. Map GitHub usernames to Slack user IDs to mention reviewers in the channel and notify them directly.
 
-This action is a drop-in replacement for the previous `workflow_call` reusable workflow ("Reusable Slack Notification") that relied on `actions/github-script` and `slackapi/slack-github-action`. It keeps the exact same functional behavior while being publishable as a standalone Marketplace action.
+## Features
 
-## Inputs
+- ✅ Sends to a Slack channel, mapped reviewers by DM, or both.
+- ✅ Resolves GitHub usernames case-insensitively through a reviewer map.
+- ✅ Mentions mapped users as `<@SLACK_USER_ID>` and leaves unmapped users as `@username`.
+- ✅ Supports channel-only notifications with an empty reviewer map (`{}`).
+- ✅ Retries transient Slack API failures and rate limits through `@slack/web-api`.
+- ✅ Fails safely when Slack rejects a request—error messages never expose the bot token.
 
-| Input                | Required                              | Default | Description |
-|-----------------------|----------------------------------------|---------|-------------|
-| `message-template`    | Yes                                    | —       | Message body sent to Slack. Newlines, whitespace, and special characters (quotes, backticks, `${...}`) are preserved exactly as provided. |
-| `target-users`        | No                                     | `""`    | Comma-separated list of usernames to notify, e.g. `alice, bob`. Entries are trimmed and empty entries removed. |
-| `send-channel`        | No                                     | `true`  | Whether to send a notification to the Slack channel. |
-| `send-dm`             | No                                     | `true`  | Whether to send direct messages to users who are mapped to a Slack user ID. |
-| `slack-bot-token`     | Yes                                    | —       | Slack bot token (e.g. from `secrets.SLACK_BOT_TOKEN`) used to authenticate API requests. |
-| `slack-channel-id`    | Required when `send-channel` is `true` | —       | Slack channel ID to post the channel notification to. |
-| `slack-reviewer-map`  | Yes                                    | —       | JSON object mapping GitHub usernames to Slack user IDs, e.g. `{ "alice": "U0123456789" }`. Use `{}` for channel-only notifications. Lookup is **case-insensitive**. |
+## How it works
 
-## Behavior
+1. Splits `target-users` on commas, trims whitespace, and removes empty entries.
+2. Looks up each GitHub username in `slack-reviewer-map`.
+3. When `send-channel` is enabled, posts the message to `slack-channel-id`, adding reviewer mentions when applicable.
+4. When `send-dm` is enabled, sends the original message to every mapped Slack user. Unmapped users do not receive DMs.
+5. If any DM fails, the action still attempts the remaining DMs, then fails the step after all attempts finish.
 
-- `target-users` is split on commas, trimmed, and empty entries are removed.
-- Each user is looked up in `slack-reviewer-map` case-insensitively.
-  - Mapped users are rendered as `<@SLACK_USER_ID>` in the channel message.
-  - Unmapped users are rendered as plain-text `@username` in the channel message; no DM is sent for them.
-- `slack-reviewer-map` remains required, but it may be `{}` when no GitHub-to-Slack mappings are needed, such as for channel-only notifications.
-- When `send-channel` is `true`, the action calls Slack's [`chat.postMessage`](https://api.slack.com/methods/chat.postMessage) with `channel: slack-channel-id` and the message template, followed by mentions when any exist.
-  - The `channel-ts` output contains the timestamp returned by Slack, when sent.
-- When `send-dm` is `true` **and** at least one user was mapped, the action calls `chat.postMessage` once per mapped Slack user ID, with `channel: <slack user id>` and `text: <message-template>` (without the mention list).
-  - No DM is sent to unmapped users.
-  - No DM is sent at all if there are no mapped users, even if `send-dm` is `true`.
-- If `send-channel` is `false`, no channel message is sent.
-- If `send-dm` is `false`, no DMs are sent.
-- Any Slack API failure (non-2xx HTTP status, or `ok: false` in the JSON response) fails the action. Error messages never include the bot token — only the target channel/user ID and a Slack platform error code when available; otherwise, `request_failed` is used.
-- The `dm-ts` output is a JSON object mapping successfully messaged Slack user IDs to timestamps, and `dm-failures` is the number of failed DMs.
-- All mapped users are attempted even if one DM fails; any failure marks the action as failed after all attempts complete.
-
-Slack requests use `@slack/web-api` with a 10-second timeout and up to three SDK retries, including for rate limits. Persistent failures still fail the action.
-
-### Outputs
-
-| Output | Description |
-|--------|-------------|
-| `channel-ts` | Timestamp of the channel message, when sent. |
-| `dm-ts` | JSON object mapping Slack user IDs to message timestamps. |
-| `dm-failures` | Number of direct messages that failed. |
+If no mapped users are supplied, no DMs are sent. Set both `send-channel` and `send-dm` to `false` to skip sending messages.
 
 ## Usage
 
@@ -70,44 +47,44 @@ jobs:
           slack-reviewer-map: ${{ secrets.SLACK_REVIEWER_MAP }}
 ```
 
-When passing GitHub event values, prefer environment variables over inserting
-event data directly into JavaScript expressions:
-
-```yaml
-env:
-  ACTION: ${{ github.event.action }}
-  NEW_REVIEWER: ${{ github.event.requested_reviewer.login }}
-```
-
-Read these values in JavaScript with `process.env.ACTION` and
-`process.env.NEW_REVIEWER`.
-
-`SLACK_REVIEWER_MAP` is a repository or organization secret containing a JSON object, for example:
+Store `SLACK_REVIEWER_MAP` as a repository or organization secret:
 
 ```json
 { "alice": "U0123456789", "bob": "U9876543210" }
 ```
 
-### Migrating from the reusable workflow
+## Inputs
 
-Previously, callers used:
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `message-template` | Yes | — | Message body to send. Newlines and special characters are preserved. |
+| `target-users` | No | `""` | Comma-separated GitHub usernames, such as `alice, bob`. |
+| `send-channel` | No | `true` | Send a notification to the Slack channel. |
+| `send-dm` | No | `true` | Send DMs to users found in the reviewer map. |
+| `slack-bot-token` | Yes | — | Slack bot token, typically `${{ secrets.SLACK_BOT_TOKEN }}`. |
+| `slack-channel-id` | When `send-channel` is `true` | — | Target Slack channel ID. |
+| `slack-reviewer-map` | Yes | — | JSON map of GitHub usernames to Slack user IDs. Use `{}` for channel-only notifications. |
 
-```yaml
-jobs:
-  notify:
-    uses: my-org/my-repo/.github/workflows/reusable-slack-notify.yml@main
-    with:
-      message_template: ${{ inputs.message_template }}
-      target_users: ${{ inputs.target_users }}
-      send_channel: ${{ inputs.send_channel }}
-      send_dm: ${{ inputs.send_dm }}
-    secrets:
-      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-      SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
-      SLACK_REVIEWER_MAP: ${{ secrets.SLACK_REVIEWER_MAP }}
-```
+## Outputs
 
-Now, call this action directly from a job step:
+| Output | Description |
+|---|---|
+| `channel-ts` | Timestamp of the channel message, when one was sent. |
+| `dm-ts` | JSON object mapping successfully messaged Slack user IDs to timestamps. |
+| `dm-failures` | Number of failed DM deliveries. |
+
+## Slack app setup
+
+Your Slack bot needs:
+
+- `chat:write` to send channel messages and DMs.
+- `chat:write.public` *(optional)* to post to public channels the bot has not joined.
+
+The bot must be in the target channel unless it has `chat:write.public`, and it must share a workspace with DM recipients.
+
+## Migrating from the reusable workflow
+
+Replace a reusable-workflow job with a normal job step and use hyphenated action inputs:
 
 ```yaml
 jobs:
@@ -125,41 +102,21 @@ jobs:
           slack-reviewer-map: ${{ secrets.SLACK_REVIEWER_MAP }}
 ```
 
-## Slack app setup
+## Notes
 
-Create/configure a Slack app with a bot token that has the following OAuth scopes:
-
-- `chat:write` — required to post channel messages and DMs.
-- `chat:write.public` (optional) — allows posting to public channels the bot has not been invited to.
-
-The bot must be a member of the target channel (or have `chat:write.public`), and it must share a workspace with each target user for DMs to succeed.
+- Slack requests use a 10-second timeout and up to three SDK retries, including rate-limit retries.
+- A Slack API error (non-2xx response or `ok: false`) fails the action.
+- The reviewer map must be a flat JSON object of `GitHub username -> Slack user ID` string pairs.
 
 ## Development
 
 ```bash
 npm install
-npm test        # Jest unit tests
-npm run lint    # ESLint
-npm run build   # ncc bundle -> dist/index.js + dist/licenses.txt
+npm test
+npm run lint
+npm run build
 ```
 
-### Test results
+## License
 
-All 34 tests pass across 5 suites (`reviewer-map`, `mentions`, `boolean-input`, `slack`, `index`), covering:
-
-- Case-insensitive reviewer map lookup and mention formatting (mapped/unmapped).
-- Trimming and empty-entry removal for `target-users`.
-- Channel-only, DM-only, both-enabled, and both-disabled combinations.
-- No DM sent when there are no mapped users.
-- Multiple DMs sent to multiple mapped users.
-- Invalid `slack-reviewer-map` JSON, invalid boolean inputs, and missing required inputs.
-- Slack HTTP errors and `ok: false` JSON responses.
-- Message templates containing newlines, quotes, backticks, and `${...}` placeholders.
-
-`npm run lint` and `npm run build` both complete without errors, and `dist/index.js` is committed and up to date with the compiled `src/` and `index.js` sources.
-
-## Known limitations
-
-- DM delivery attempts continue for all mapped users even if one fails, but the action is still marked as failed overall if any DM could not be delivered.
-- Slack rate limits are retried by the SDK up to three times; persistent failures will fail the action.
-- The reviewer map is expected to be flat key/value pairs of `username -> Slack user ID` strings; nested structures are rejected.
+[MIT](LICENSE)
