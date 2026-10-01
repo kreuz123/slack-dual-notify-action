@@ -13,6 +13,10 @@ inputs:
     description: Comma-separated list of usernames to notify. Entries are trimmed and empty entries are removed.
     required: false
     default: ""
+  mention-users:
+    description: Optional comma-separated list of usernames to mention in the channel message only, parsed like target-users. When it contains no usernames (omitted, empty, whitespace-only, or only commas), target-users is used. Does not change DM recipients, which always come from target-users.
+    required: false
+    default: ""
   send-channel:
     description: Whether to send a notification to the Slack channel.
     required: false

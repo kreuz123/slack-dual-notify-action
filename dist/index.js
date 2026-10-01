@@ -14,6 +14,7 @@ async function run() {
   try {
     const messageTemplate = core.getInput("message-template", { required: true, trimWhitespace: false });
     const targetUsersInput = core.getInput("target-users");
+    const mentionUsersInput = core.getInput("mention-users");
     const token = core.getInput("slack-bot-token", { required: true });
     const reviewerMapInput = core.getInput("slack-reviewer-map", { required: true });
 
@@ -27,7 +28,10 @@ async function run() {
 
     const reviewerMap = parseReviewerMap(reviewerMapInput);
     const targetUsers = parseTargetUsers(targetUsersInput);
-    const { mentions, slackIds } = buildMentions(targetUsers, reviewerMap);
+    const { slackIds } = buildMentions(targetUsers, reviewerMap);
+    const parsedMentionUsers = parseTargetUsers(mentionUsersInput);
+    const mentionUsers = parsedMentionUsers.length > 0 ? parsedMentionUsers : targetUsers;
+    const { mentions } = buildMentions(mentionUsers, reviewerMap);
 
     if (sendChannel) {
       const channelText = mentions ? `${messageTemplate} ${mentions}` : messageTemplate;
