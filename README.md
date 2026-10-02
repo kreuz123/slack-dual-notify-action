@@ -1,28 +1,68 @@
 # Slack Dual Notify Action
 
-A GitHub Action that sends a Slack channel notification, direct messages (DMs) to reviewers, or both. Map GitHub usernames to Slack user IDs to mention reviewers in the channel and notify them directly.
+A GitHub Action that sends a Slack channel message, reviewer direct messages (DMs), or both. Use it on its own, with [`kreuz123/urgent-pr-slack-notification`](https://github.com/kreuz123/urgent-pr-slack-notification), or with another workflow or action that provides a message and reviewer usernames.
 
-## Features
+`kreuz123/urgent-pr-slack-notification` is the recommended companion action. It detects pull requests with an `urgent` label and decides who to notify. `slack-dual-notify-action` sends the Slack channel message and reviewer DMs.
 
-- ✅ Sends to a Slack channel, mapped reviewers by DM, or both.
-- ✅ Resolves GitHub usernames case-insensitively through a reviewer map.
-- ✅ Mentions mapped users as `<@SLACK_USER_ID>` and leaves unmapped users as `@username`.
-- ✅ Supports channel-only notifications with an empty reviewer map (`{}`).
-- ✅ Optionally mentions a different set of users in the channel (`mention-users`) than the users who receive DMs (`target-users`).
-- ✅ Retries transient Slack API failures and rate limits through `@slack/web-api`.
-- ✅ Fails safely when Slack rejects a request—error messages never expose the bot token.
+For instructions on setting up both actions together, see the [`urgent-pr-slack-notification` README](https://github.com/kreuz123/urgent-pr-slack-notification#readme).
 
-## How it works
+## Setup
 
-1. Splits `target-users` (and `mention-users`, if set) on commas, trims whitespace, and removes empty entries. Duplicates are not removed.
-2. Looks up each GitHub username in `slack-reviewer-map`.
-3. When `send-channel` is enabled, posts the message to `slack-channel-id`, adding mentions for `mention-users`—or for `target-users` when `mention-users` contains no usernames.
-4. When `send-dm` is enabled, sends the original message to every mapped Slack user in `target-users`. Unmapped users and users listed only in `mention-users` do not receive DMs.
-5. If any DM fails, the action still attempts the remaining DMs, then fails the step after all attempts finish.
+Complete Slack setup first, then add the Slack values as GitHub Actions secrets in the repository that will run the workflow.
 
-If no mapped users are supplied, no DMs are sent. Set both `send-channel` and `send-dm` to `false` to skip sending messages.
+### 1. Create and configure a Slack app
 
-## Usage
+Go to [Slack API: Your Apps](https://api.slack.com/apps), select **Create New App**, and create an app for your Slack workspace.
+
+Under **OAuth & Permissions**, add these **Bot Token Scopes**:
+
+- `chat:write` — required to send channel messages and DMs.
+- `chat:write.public` — optional; lets the bot post to public channels it has not joined.
+
+Select **Install to Workspace** (or reinstall the app if you changed its permissions), authorize it, and copy the **Bot User OAuth Token**. Keep this token private; store it only as a secret.
+
+### 2. Give the bot access to the channel
+
+For a private channel, invite the bot to the channel. For a public channel, you can invite the bot or use the optional `chat:write.public` scope to post without joining. The bot also needs to share a workspace with the users it will DM.
+
+### 3. Find the Slack channel and user IDs
+
+Open the target channel in a browser. A Slack URL looks like:
+
+```text
+https://app.slack.com/client/T0123456789/C0123456789
+```
+
+Use the final `C...` value as the channel ID.
+
+To find a user's ID, open their Slack profile, select **More** → **Copy member ID**, and use that value in the reviewer map.
+
+For example, this JSON maps GitHub usernames to Slack user IDs:
+
+```json
+{
+  "alice": "U0123456789",
+  "bob": "U9876543210"
+}
+```
+
+GitHub username matching is case-insensitive. Use `{}` if you only need channel notifications and do not need reviewer DMs or mapped Slack mentions.
+
+### 4. Create GitHub Actions secrets
+
+In the repository where you use this action, go to **Settings → Secrets and variables → Actions** and create these repository secrets:
+
+| Secret | Value |
+|---|---|
+| `SLACK_BOT_TOKEN` | The Slack bot token. Store it only as a secret; never put it directly in a workflow file. |
+| `SLACK_CHANNEL_ID` | The channel ID from the Slack URL. Needed when `send-channel` is `true`. |
+| `SLACK_REVIEWER_MAP` | The JSON map of GitHub usernames to Slack user IDs, or `{}` for channel-only notifications. |
+
+You can use organization secrets instead when multiple repositories share the same Slack configuration.
+
+## Quick start
+
+Once the Slack app and secrets are ready, add a workflow like this to the repository. Replace the trigger and usernames to match your workflow:
 
 ```yaml
 name: Notify reviewers on Slack
@@ -35,12 +75,10 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Slack notification
-        uses: kreuz123/slack-dual-notify-action@v1
+      - uses: kreuz123/slack-dual-notify-action@v1
         with:
-          message-template: |
-            A new PR needs your review!
-          target-users: alice, bob, carol
+          message-template: A new PR needs your review!
+          target-users: alice, bob
           send-channel: true
           send-dm: true
           slack-bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -48,122 +86,72 @@ jobs:
           slack-reviewer-map: ${{ secrets.SLACK_REVIEWER_MAP }}
 ```
 
-Store `SLACK_REVIEWER_MAP` as a repository or organization secret:
+## Use with `urgent-pr-slack-notification`
 
-```json
-{ "alice": "U0123456789", "bob": "U9876543210" }
-```
-
-### Separate channel mentions and DM recipients
-
-`mention-users` controls **only** who is mentioned in the channel message. `target-users` controls **only** who receives DMs. For example, this run posts one channel message mentioning Alice, Bob, and Carol, and DMs only Alice:
+Use the urgent PR action's outputs as inputs to this action. Configure the first action for your workflow:
 
 ```yaml
-      - uses: kreuz123/slack-dual-notify-action@v1 # requires a release that includes mention-users
-        with:
-          message-template: Urgent PR needs review
-          mention-users: alice, bob, carol # channel mentions only
-          target-users: alice              # DM recipients only
-          send-channel: true
-          send-dm: true
-          slack-bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
-          slack-channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
-          slack-reviewer-map: ${{ secrets.SLACK_REVIEWER_MAP }}
+- id: check
+  uses: kreuz123/urgent-pr-slack-notification@v1
+  # Configure the urgent PR action here.
+
+- if: steps.check.outputs.urgent == 'true'
+  uses: kreuz123/slack-dual-notify-action@v1
+  with:
+    message-template: ${{ steps.check.outputs.message }}
+    target-users: ${{ steps.check.outputs.target-users }}
+    mention-users: ${{ steps.check.outputs.mention-users }}
+    send-channel: ${{ steps.check.outputs.send-channel }}
+    send-dm: ${{ steps.check.outputs.send-dm }}
+    slack-bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
+    slack-channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+    slack-reviewer-map: ${{ secrets.SLACK_REVIEWER_MAP }}
 ```
 
-If `mention-users` is omitted, empty, whitespace-only, or contains only commas, the channel mentions fall back to `target-users`, so existing workflows behave exactly as before. An empty value is **not** a way to suppress mentions.
+Adjust the output names to match the version of `urgent-pr-slack-notification` you use. See its [README](https://github.com/kreuz123/urgent-pr-slack-notification#readme) for the complete combined setup.
 
-### Integration with `urgent-pr-slack-notification`
+## `target-users` and `mention-users`
 
-> **Companion update required.** This snippet depends on a companion change in [`kreuz123/urgent-pr-slack-notification`](https://github.com/kreuz123/urgent-pr-slack-notification) that adds the `mention-users` output and decides `send-channel` per run. Neither that output nor `mention-users` in this action is available in currently published tags; pin both actions to releases that include these changes before using it. Release this action first so that it accepts `mention-users` before the caller starts sending it.
+- `target-users` lists GitHub usernames who receive DMs. If `mention-users` is empty or omitted, these users are also mentioned in the channel.
+- `mention-users` lists users to mention in the channel only. They receive DMs only if they are also in `target-users`.
+
+For example, this sends one channel message mentioning Alice and Bob, but sends a DM only to Alice:
 
 ```yaml
-      - id: check
-        uses: kreuz123/urgent-pr-slack-notification@<release-with-mention-users>
-        # ...
-
-      - if: steps.check.outputs.urgent == 'true'
-        uses: kreuz123/slack-dual-notify-action@<release-with-mention-users>
-        with:
-          message-template: ${{ steps.check.outputs.message }}
-          target-users: ${{ steps.check.outputs.target-users }}   # unchanged
-          mention-users: ${{ steps.check.outputs.mention-users }} # new
-          send-channel: ${{ steps.check.outputs.send-channel }}
-          send-dm: ${{ steps.check.outputs.send-dm }}
-          slack-bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
-          slack-channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
-          slack-reviewer-map: ${{ secrets.SLACK_REVIEWER_MAP }}
+with:
+  message-template: Urgent PR needs review
+  mention-users: alice, bob
+  target-users: alice
+  send-channel: true
+  send-dm: true
 ```
-
-Adjust the `steps.check.outputs.*` names to match the outputs of the urgent action version you use.
-
-### Responsibilities and limitations
-
-- This action handles **one workflow run at a time**. It does not deduplicate messages across runs or reruns and cannot enforce exactly-once delivery.
-- Whether a run posts to the channel is decided entirely by the caller through `send-channel`. Avoiding duplicate channel posts for a PR created with several reviewers relies on the upstream action setting `send-channel: true` in only one run.
-- `mention-users` does not solve differences between the reviewer lists seen by different runs, or a failure of the run chosen to post to the channel; in those cases there may be duplicate or missing channel messages.
-- Rerunning a workflow sends its messages again.
-- Error handling is unchanged: the channel message is sent before DMs, and if the channel post fails, the step fails before any DMs are attempted. DM failures do not stop the remaining DMs, but they fail the step after all attempts.
-
-**Tested:** unit tests with mocked Slack requests cover separate channel mentions and DM recipients, fallback to `target-users`, channel-only, DM-only, and disabled modes, normalization and unmapped users, DM failures, and a simulated three-run caller where only the first run has `send-channel: true` (one channel post, one DM per reviewer). That simulation only checks this action's input contract; it does not show that the upstream action picks one leader consistently.
-
-**Not tested:** live Slack or GitHub integration, concurrent `review_requested` runs, workflow reruns, and partial Slack send failures in a real environment.
 
 ## Inputs
 
 | Input | Required | Default | Description |
 |---|---|---|---|
-| `message-template` | Yes | — | Message body to send. Newlines and special characters are preserved. |
-| `target-users` | No | `""` | Comma-separated GitHub usernames, such as `alice, bob`. Determines DM recipients, and channel mentions when `mention-users` is not set. |
-| `mention-users` | No | `""` | Comma-separated GitHub usernames to mention in the channel message only, resolved through `slack-reviewer-map`. Never receive DMs unless also in `target-users`. Falls back to `target-users` when it contains no usernames. |
-| `send-channel` | No | `true` | Send a notification to the Slack channel. |
-| `send-dm` | No | `true` | Send DMs to users found in the reviewer map. |
-| `slack-bot-token` | Yes | — | Slack bot token, typically `${{ secrets.SLACK_BOT_TOKEN }}`. |
-| `slack-channel-id` | When `send-channel` is `true` | — | Target Slack channel ID. |
-| `slack-reviewer-map` | Yes | — | JSON map of GitHub usernames to Slack user IDs. Use `{}` for channel-only notifications. |
+| `message-template` | Yes | — | Message body to send. |
+| `target-users` | No | `""` | Comma-separated GitHub usernames who receive DMs. Also used for channel mentions when `mention-users` is empty. |
+| `mention-users` | No | `""` | Comma-separated GitHub usernames to mention in the channel. Does not determine DM recipients. |
+| `send-channel` | No | `true` | Whether to send a channel message. |
+| `send-dm` | No | `true` | Whether to send DMs to mapped `target-users`. |
+| `slack-bot-token` | Yes | — | Slack bot token. |
+| `slack-channel-id` | When `send-channel` is `true` | — | Slack channel ID. |
+| `slack-reviewer-map` | Yes | — | JSON map of GitHub usernames to Slack user IDs. |
 
 ## Outputs
 
 | Output | Description |
 |---|---|
 | `channel-ts` | Timestamp of the channel message, when one was sent. |
-| `dm-ts` | JSON object mapping successfully messaged Slack user IDs to timestamps. |
+| `dm-ts` | JSON map of Slack user IDs and timestamps for successfully sent DMs. |
 | `dm-failures` | Number of failed DM deliveries. |
-
-## Slack app setup
-
-Your Slack bot needs:
-
-- `chat:write` to send channel messages and DMs.
-- `chat:write.public` *(optional)* to post to public channels the bot has not joined.
-
-The bot must be in the target channel unless it has `chat:write.public`, and it must share a workspace with DM recipients.
-
-## Migrating from the reusable workflow
-
-Replace a reusable-workflow job with a normal job step and use hyphenated action inputs:
-
-```yaml
-jobs:
-  notify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: kreuz123/slack-dual-notify-action@v1
-        with:
-          message-template: ${{ inputs.message_template }}
-          target-users: ${{ inputs.target_users }}
-          send-channel: ${{ inputs.send_channel }}
-          send-dm: ${{ inputs.send_dm }}
-          slack-bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
-          slack-channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
-          slack-reviewer-map: ${{ secrets.SLACK_REVIEWER_MAP }}
-```
 
 ## Notes
 
-- Slack requests use a 10-second timeout and up to three SDK retries, including rate-limit retries.
-- A Slack API error (non-2xx response or `ok: false`) fails the action.
-- The reviewer map must be a flat JSON object of `GitHub username -> Slack user ID` string pairs.
+- GitHub usernames are matched case-insensitively. Users without a Slack ID mapping are shown as `@username` in the channel and do not receive a DM.
+- The action retries transient Slack API and rate-limit failures. Slack request failures fail the action without exposing the bot token.
+- Rerunning a workflow sends notifications again.
 
 ## Development
 
