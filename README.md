@@ -170,4 +170,4 @@ Built with support from [Flo Apps Ltd](https://floapps.com), inspired by real-wo
 
 ## License
 
-This project is licensed under the [MIT](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
