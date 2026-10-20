@@ -3,7 +3,7 @@ description: Send a Slack channel notification and/or direct messages to reviewe
 author: kreuz123
 branding:
   icon: message-square
-  color: blue
+  color: purple
 
 inputs:
   message-template:
