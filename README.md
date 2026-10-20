@@ -164,6 +164,10 @@ npm run lint
 npm run build
 ```
 
+## Acknowledgement
+
+Built with support from [Flo Apps Ltd](https://floapps.com), inspired by real-world workflow automation needs.
+
 ## License
 
 [MIT](LICENSE)
