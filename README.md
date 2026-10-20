@@ -4,7 +4,7 @@ A GitHub Action that sends a Slack channel message, reviewer direct messages (DM
 
 Use it on its own, with [`kreuz123/urgent-pr-slack-notification`](https://github.com/kreuz123/urgent-pr-slack-notification), or with another workflow or action that provides a message and reviewer usernames.
 
-`kreuz123/urgent-pr-slack-notification` is the recommended companion action. It detects pull requests with an `urgent` label and decides who to notify. `slack-dual-notify-action` sends the Slack channel message and reviewer DMs.
+**`kreuz123/urgent-pr-slack-notification` is the recommended companion action. It detects pull requests with an `urgent` label and decides who to notify. `slack-dual-notify-action` sends the Slack channel message and reviewer DMs.**
 
 For instructions on setting up both actions together, see the [`urgent-pr-slack-notification` README](https://github.com/kreuz123/urgent-pr-slack-notification#readme).
 
